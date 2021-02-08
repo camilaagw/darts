@@ -400,9 +400,9 @@ class NBEATSModel(TorchForecastingModel):
             self.layer_widths = [layer_widths] * num_stacks
 
     def _create_model(self, input_dim: int, output_dim: int) -> torch.nn.Module:
-        raise_if_not(input_dim == 1 and output_dim == 1,
-                     'The N-Beats model currently supports only univariate time series.'
-                     'Currently: input_dim = {} and  output_dim = {}'.format(input_dim, output_dim))
+        # raise_if_not(input_dim == 1 and output_dim == 1,
+        #              'The N-Beats model currently supports only univariate time series.'
+        #              'Currently: input_dim = {} and  output_dim = {}'.format(input_dim, output_dim))
         return _NBEATSModule(
             self.input_chunk_length,
             self.output_chunk_length,
