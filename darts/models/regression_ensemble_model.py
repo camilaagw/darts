@@ -2,6 +2,7 @@
 Regression ensemble model
 -------------------------
 """
+from functools import reduce
 from typing import Optional, List
 
 from darts.timeseries import TimeSeries
@@ -19,6 +20,7 @@ class RegressionEnsembleModel(EnsembleModel):
     def __init__(self,
                  forecasting_models: List[ForecastingModel],
                  regression_train_n_points: int,
+                 forecast_horizon: Optional[int] = None,
                  regression_model=None):
         """
         Class for ensemble models using a regression model for ensembling individual models' predictions.
@@ -34,8 +36,11 @@ class RegressionEnsembleModel(EnsembleModel):
             List of forecasting models whose predictions to ensemble
         regression_train_n_points
             The number of points to use to train the regression model
+        forecast_horizon
+            The forecast horizon for the model predictions.
+            If not specified, defaults to `regression_train_n_points`
         regression_model
-            Any regression model with predict() and fit() methods (e.g. from scikit-learn)
+            Any regression model with predict() and fit() methods (e.g. from scikit-learn).
             Default: `darts.model.LinearRegressionModel(fit_intercept=False)`
         """
         super().__init__(forecasting_models)
@@ -50,6 +55,7 @@ class RegressionEnsembleModel(EnsembleModel):
         )
         self.regression_model = regression_model
         self.train_n_points = regression_train_n_points
+        self.forecast_horizon = forecast_horizon or regression_train_n_points
 
     def fit(self, series: TimeSeries) -> None:
         super().fit(series)
@@ -59,19 +65,20 @@ class RegressionEnsembleModel(EnsembleModel):
                  "regression_train_n_points parameter too big (must be smaller or equal" +
                  " to the number of points in training_series)",
                  logger)
-        forecast_training = self.training_series[:-self.train_n_points]
-        regression_target = self.training_series[-self.train_n_points:]
 
-        # fit the forecasting models
-        for model in self.models:
-            model.fit(forecast_training)
+        # create individual model predictions
+        starting_point = len(self.training_series) - self.train_n_points - self.forecast_horizon + 1
 
-        # predict train_n_points points for each model
-        predictions = self.models[0].predict(self.train_n_points)
-        for model in self.models[1:]:
-            predictions = predictions.stack(model.predict(self.train_n_points))
+        model_predictions = [model.historical_forecasts(self.training_series,
+                                                        start=starting_point,
+                                                        forecast_horizon=self.forecast_horizon)
+                             for model in self.models]
+
+        # stack model predictions into a single TimeSeries object
+        predictions = reduce(lambda a, b: a.stack(b), model_predictions)
 
         # train the regression model on the individual models' predictions
+        regression_target = self.training_series[-self.train_n_points:]
         self.regression_model.fit(series=regression_target, exog=predictions)
 
         # prepare the forecasting models for further predicting by fitting
